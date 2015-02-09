@@ -38,43 +38,47 @@ module Mongoid
       embed_name = embed_opts.delete(:as)
       skipped.push(embed_name).push("#{embed_name}_id")
 
-      return if klass.const_defined?(embedded_class)
+      return if klass.const_defined?(embedded_class) && [klass, embedded_class].join('::').constantize.respond_to?(:original_class)
       klass.send(:include, equality_module_for(klass))
 
-      document_klass = Class.new do
-        include Mongoid::Document
-        include Mongoid::EmbeddedCopy.equality_module_for(klass)
+      document_module = Module.new do
+        extend ActiveSupport::Concern
 
-        class_attribute :original_class, instance_writer: false
-        class_attribute :skipped_attributes, instance_writer: false
-        class_attribute :embed_name
+        included do
+          include Mongoid::Document
+          include Mongoid::EmbeddedCopy.equality_module_for(klass)
 
-        self.original_class = klass
-        self.embed_name = embed_name
-        self.skipped_attributes = skipped
+          class_attribute :original_class, instance_writer: false
+          class_attribute :skipped_attributes, instance_writer: false
+          class_attribute :embed_name
 
-        def initialize(*attrs)
-          if attrs.first.is_a?(original_class)
-            attrs = attrs.first.attributes.to_h.dup
-            skipped_attributes.each {|n| attrs.delete(n) }
-          end
-          super(attrs)
-        end
+          self.original_class = klass
+          self.embed_name = embed_name
+          self.skipped_attributes = skipped
 
-        embedded_in embed_name, embed_opts
-
-        klass.fields.each do |name, f|
-          next if skipped.include?(name) || name == '_id'
-          options = f.options.dup
-          options.delete(:klass)
-          field name, options
-
-          if opts[:update_original]
-            define_method("#{name}_with_update_original=") do |value|
-              load_original.set(name => value)
-              public_send("#{name}_without_update_original=", value)
+          def initialize(*attrs)
+            if attrs.first.is_a?(original_class)
+              attrs = attrs.first.attributes.to_h.dup
+              skipped_attributes.each {|n| attrs.delete(n) }
             end
-            alias_method_chain "#{name}=", :update_original
+            super(attrs)
+          end
+
+          embedded_in embed_name, embed_opts
+
+          klass.fields.each do |name, f|
+            next if skipped.include?(name) || name == '_id'
+            options = f.options.dup
+            options.delete(:klass)
+            field name, options
+
+            if opts[:update_original]
+              define_method("#{name}_with_update_original=") do |value|
+                load_original.set(name => value)
+                public_send("#{name}_without_update_original=", value)
+              end
+              alias_method_chain "#{name}=", :update_original
+            end
           end
         end
 
@@ -82,7 +86,14 @@ module Mongoid
           @original ||= original_class.find(id)
         end
       end
-      klass.const_set(embedded_class, document_klass)
+
+      if klass.const_defined?(embedded_class)
+        klass.const_get(embedded_class).send(:include, document_module)
+      else
+        klass.const_set(embedded_class, Class.new do
+          include document_module
+        end)
+      end
     end
 
     def self.equality_module_for(klass)

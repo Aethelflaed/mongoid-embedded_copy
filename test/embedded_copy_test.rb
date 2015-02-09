@@ -59,5 +59,19 @@ class EmbeddedCopyTest < BaseTest
 
     assert_equal 'World', post.reload.title
   end
+
+  test 'should use predefined class and add attributes once' do
+    class ::User
+      embeds_copy :a_post, class_name: 'Post', skip: :u, embedded_class: 'SpecializedCopy'
+    end
+
+    post = Post.create({title: 'Hello', content: 'Hello World'})
+    user = User.create({firstname: 'Geoffroy', lastname: 'Planquart', a_post: post})
+
+    assert_equal Post::SpecializedCopy, user.a_post.class
+    assert_nothing_raised(NoMethodError) do
+      user.a_post.some_method
+    end
+  end
 end
 
