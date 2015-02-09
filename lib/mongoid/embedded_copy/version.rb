@@ -1,5 +1,5 @@
 module Mongoid
-  class EmbeddedCopy
+  module EmbeddedCopy
     VERSION = '1.0.0'
   end
 end
