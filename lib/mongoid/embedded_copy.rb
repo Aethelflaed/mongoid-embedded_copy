@@ -5,19 +5,23 @@ module Mongoid
     class_methods do
       def embeds_copy(name, opts = {})
         klass = opts[:class_name] || name.to_s.camelize
-        new_klass = "CopyFor#{self}".gsub('::', '')
-        full_klass = [klass, new_klass].join('::')
-        EmbeddedCopy.for(klass, opts.merge({:in => self}))
+        embedded_class = EmbeddedCopy.embedded_class(self, opts, klass)
+        EmbeddedCopy.for(klass, opts.merge({:in => self, inverse_of: name}))
         mongoid_options = Mongoid::Relations::Embedded::One.valid_options +
           Mongoid::Relations::Options::COMMON
-        embeds_one name, opts.merge({class_name: full_klass}).slice(*mongoid_options)
+        embeds_one name, opts.merge({class_name: embedded_class}).slice(*mongoid_options)
 
         define_method("#{name}_with_copy=") do |value|
-          value = full_klass.constantize.new(value) if value.class.name == klass
+          value = embedded_class.constantize.new(value) if value.class.name == klass
           self.public_send("#{name}_without_copy=", value)
         end
         alias_method_chain "#{name}=", :copy
       end
+    end
+
+    def self.embedded_class(klass, opts, prefix = nil)
+      embedded_class = opts[:embedded_class] || "CopyFor#{klass}".gsub('::', '')
+      [prefix, embedded_class].compact.join('::')
     end
 
     def self.for(klass, opts = {})
@@ -29,8 +33,13 @@ module Mongoid
 
       embed_opts = opts[:in]
       embed_opts = {class_name: embed_opts.to_s, as: embed_opts.to_s.underscore} if embed_opts.is_a?(Class)
+      embed_opts[:inverse_of] = opts[:inverse_of]
+      embedded_class = self.embedded_class(embed_opts[:class_name], opts)
       embed_name = embed_opts.delete(:as)
       skipped.push(embed_name).push("#{embed_name}_id")
+
+      return if klass.const_defined?(embedded_class)
+      klass.send(:include, equality_module_for(klass))
 
       document_klass = Class.new do
         include Mongoid::Document
@@ -59,14 +68,21 @@ module Mongoid
           options = f.options.dup
           options.delete(:klass)
           field name, options
+
+          if opts[:update_original]
+            define_method("#{name}_with_update_original=") do |value|
+              load_original.set(name => value)
+              public_send("#{name}_without_update_original=", value)
+            end
+            alias_method_chain "#{name}=", :update_original
+          end
         end
 
         def load_original
-          original_class.find(id)
+          @original ||= original_class.find(id)
         end
       end
-      klass.const_set("CopyFor#{embed_opts[:class_name].gsub('::', '')}", document_klass)
-      klass.send(:include, equality_module_for(klass))
+      klass.const_set(embedded_class, document_klass)
     end
 
     def self.equality_module_for(klass)
