@@ -1,6 +1,5 @@
 require 'bundler/setup'
 require 'simplecov'
-require 'pry'
 SimpleCov.configure do
   add_filter '/test/'
 end
