@@ -73,5 +73,21 @@ class EmbeddedCopyTest < BaseTest
       user.a_post.some_method
     end
   end
+
+  test 'should update copy from given object' do
+    post = Post.create({title: 'Hello', content: 'Hello World'})
+    user = User.create({firstname: 'Geoffroy', lastname: 'Planquart', a_post: post})
+
+    post.title = 'World'
+    user.a_post = post
+    assert_equal 'Hello', user.a_post.title
+    user.a_post.update_from(post)
+    assert_equal 'World', user.a_post.title
+
+    post.title = 'Hello World'
+    post.save
+    user.a_post.update_from_original
+    assert_equal 'Hello World', user.a_post.title
+  end
 end
 

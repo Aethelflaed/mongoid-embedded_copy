@@ -64,6 +64,16 @@ module Mongoid
             super(attrs)
           end
 
+          def update_from_original
+            update_from(load_original)
+          end
+
+          def update_from(document)
+            attrs = document.attributes.to_h.dup
+            skipped_attributes.each {|n| attrs.delete(n) }
+            update_attributes(attrs)
+          end
+
           embedded_in embed_name, embed_opts
 
           klass.fields.each do |name, f|

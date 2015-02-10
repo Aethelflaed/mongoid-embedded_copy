@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    mongoid-embedded_copy (1.0.1)
+    mongoid-embedded_copy (1.0.2)
       activesupport (~> 4.0)
       mongoid (~> 4.0)
 
