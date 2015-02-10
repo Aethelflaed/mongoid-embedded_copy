@@ -67,7 +67,7 @@ module Mongoid
           embedded_in embed_name, embed_opts
 
           klass.fields.each do |name, f|
-            next if skipped.include?(name) || name == '_id'
+            next if skipped.include?(name) || name == '_id' || f.metadata
             options = f.options.dup
             options.delete(:klass)
             field name, options
@@ -80,6 +80,13 @@ module Mongoid
               alias_method_chain "#{name}=", :update_original
             end
           end
+
+          klass.relations.each do |name, rel|
+            next if skipped.include?(name)
+            options = rel.relation.valid_options +
+              Mongoid::Relations::Options::COMMON
+            public_send(rel.macro, name, rel.to_h.slice(options))
+          end
         end
 
         def load_original
@@ -87,13 +94,10 @@ module Mongoid
         end
       end
 
-      if klass.const_defined?(embedded_class)
-        klass.const_get(embedded_class).send(:include, document_module)
-      else
-        klass.const_set(embedded_class, Class.new do
-          include document_module
-        end)
+      if !klass.const_defined?(embedded_class)
+        klass.const_set(embedded_class, Class.new)
       end
+      klass.const_get(embedded_class).send(:include, document_module)
     end
 
     def self.equality_module_for(klass)
